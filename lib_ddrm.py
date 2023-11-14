@@ -70,8 +70,11 @@ class DDRM(DDPM):
         
         
         #x_bar_T = np.random.normal(loc=S_mask*y_bar, scale=np.sqrt(self.sigmasquare[T]*np.ones_like(y_bar) - np.square(sigma_y*S_inv_diag)))
-        x_bar_T = np.random.normal(loc=np.zeros_like(y_bar), scale=np.sqrt(self.sigmasquare[T]*np.ones_like(y_bar)))
-
+        if onlymean:
+            x_bar_T = np.zeros_like(y_bar) #experimental
+        else:
+            x_bar_T = np.random.normal(loc=np.zeros_like(y_bar), scale=np.sqrt(self.sigmasquare[T]*np.ones_like(y_bar)))
+        
         with torch.no_grad():
             
             #x_inp_bar = torch.from_numpy(x_bar_T)
