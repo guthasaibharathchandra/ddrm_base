@@ -226,7 +226,7 @@ def sample_timesteps(T_ddpm, T_short=20):
     s = T_ddpm // T_short    
     while len(T_short_list) < T_short:
             t = T_short_list[0] - s
-            t = t if t > 1 else 1
+            t = t if t >= 1 else 0
             T_short_list = [t,] + T_short_list
     T_short_list = np.asarray(T_short_list)
     assert len(T_short_list) == T_short

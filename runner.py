@@ -104,7 +104,7 @@ def load_dataset_and_task(config, args):
     return dataset, val_loader, H
 
 
-def run_evaluation(config, args, val_loader, ddrm_model, H):
+def run_evaluation(config, args, val_loader, ddrm_model, H, T_ddrm_steps=20):
 
         device = torch.device("cuda")
         print(f'Start from {args.subset_start}')
@@ -112,8 +112,9 @@ def run_evaluation(config, args, val_loader, ddrm_model, H):
         idx_so_far = args.subset_start
         avg_psnr = 0.0
         avg_ssim = 0.0
+        avg_metric_psnr = 0.0
         pbar = tqdm.tqdm(val_loader)
-        kid = KernelInceptionDistance(normalize=True, compute_on_cpu=False).cuda()
+        kid = KernelInceptionDistance(subsets=100, subset_size=100, normalize=True, compute_on_cpu=False).cuda()
         
         for x_orig, classes in pbar:
             
@@ -132,7 +133,7 @@ def run_evaluation(config, args, val_loader, ddrm_model, H):
             )
             
             with torch.no_grad():
-                x = ddrm_model.reverse_diffusion_ddrm(x, y, args.sigma_y, args.eta, args.eta_b, config.data.channels, config.data.image_size, H=H, T_ddrm=20, cuda=True, onlymean=False)
+                x = ddrm_model.reverse_diffusion_ddrm(x, y, args.sigma_y, args.eta, args.eta_b, config.data.channels, config.data.image_size, H=H, T_ddrm=T_ddrm_steps, cuda=True, onlymean=False)
         
             x = inverse_data_transform(config, x)
             
@@ -143,23 +144,26 @@ def run_evaluation(config, args, val_loader, ddrm_model, H):
                     rx = x[j].to(device).reshape((1,config.data.channels, config.data.image_size, config.data.image_size))
                     
                     ssim = structural_similarity_index_measure(rx, rxorig)
-                    #psnr = peak_signal_noise_ratio(rx, rxorig)
+                    metric_psnr = peak_signal_noise_ratio(rx, rxorig)
                     mse = torch.mean((rx - rxorig) ** 2)
                     psnr = 10 * torch.log10(1 / mse)
                     kid.update(rx, real=False)
                     kid.update(rxorig, real=True)
 
                     avg_psnr += float(psnr)
+                    avg_metric_psnr += float(metric_psnr)
                     avg_ssim += float(ssim)
 
             idx_so_far += y.shape[0]
-            pbar.set_description(f"PSNR = {round(avg_psnr / (idx_so_far - idx_init),2)}, SSIM = {round(avg_ssim / (idx_so_far - idx_init),2)}")
+            pbar.set_description(f"PSNR = {round(avg_psnr / (idx_so_far - idx_init),2)}, METRIC_PSNR = {round(avg_metric_psnr / (idx_so_far - idx_init),2)}, SSIM = {round(avg_ssim / (idx_so_far - idx_init),2)}")
 
         avg_psnr = avg_psnr / (idx_so_far - idx_init)
         avg_ssim = avg_ssim / (idx_so_far - idx_init)
+        avg_metric_psnr = avg_metric_psnr / (idx_so_far - idx_init)
         kid_mean, kid_std  = kid.compute()
         kid_mean, kid_std = round(float(kid_mean*1e3),2), round(float(kid_std*1e3),2)
         print(f"Total Average PSNR = {round(avg_psnr,2)}")
+        print(f"Total Average Metric PSNR = {round(avg_metric_psnr,2)}")
         print(f"Total Average SSIM = {round(avg_ssim,2)}")
         print(f"KID (experimental) = {kid_mean}+-{kid_std}")
         print("Number of samples: %d" % (idx_so_far - idx_init))
